@@ -1,111 +1,89 @@
-Project intro
+Pawn BFS
 =============
 
-When counting possible chess positions, pawns are an important part of the
-process because they can become any other piece when promoted. This quickly
-increases the number of potential "armies" on the board and the number of
-possible diagrams. This project searches for possible pawn diagrams on the
-board, considering specifically how many diagonal captures are necessary to
-reach each. Hopefully this count will illustrate that fewer chess positions are
-possible than previously thought.
+When counting possible chess positions, pawns are most important because they can promote to any other piece. This quickly increases the number of potential "armies" on the board and the number of
+possible diagrams. This project searches for possible pawn diagrams on the board, considering specifically how many diagonal captures are necessary to reach each. Our goal is to demonstrate a tight upper bound on the number of reachable chess positions.
 
 Method
 ------
 
-Every pawn diagram is noted for its number of white and black pawns and total
-progress of each piece from its home square. This makes 35,721 categories of
-pawns, and the precedents and antecedents of a given category are predictable.
-Due to symmetries, only 20,598 categories are traversed.
+A pawn diagram includes the position and color of each pawn on the board. A diagram can be measured on the maximum remaining moves for white and black pawns. For example, at the start position, white and black both have 40 moves remaining (each pawn could progress 5 squares, with captures). With all pawns gone, zero moves are remaining.
 
-The included programs begin from the opening position and branch to all possible
-positions, creating useful tallies.
+This makes 41×41=1681 categories of pawn diagrams. Due to symmetries, only 861 categories are traversed. The included programs begin from the opening position and branch to all possible positions, creating useful tallies.
 
-ALL PROGRAMS require a 64-bit little endian system with a GNU compiler.
+All programs require a 64-bit little endian system with a GNU compiler.
 
-Record Format
--------------
+- `xxd` - Standard command line tool, use to create opening position file,
+  which has one record
+- `print` - Lists all records in a file for debugging
+- `tally` - Summarizes the records in a file
+- `bfs` - Reads each record in a file, finds all diagrams reachable by one
+  move, saves those records to a new file
+- `hsort` - Sorts records in a file using heapsort (qsort was slower on SSDs)
+- `merge` - Removes duplicate records in a sorted file
+
+## Record format
 
 The opening position is represented with:
 
-`mkdir -p data`
+```sh
+mkdir -p data
+echo 'ff00 0000 00ff ffff 0000 0000 00ff 0000' | xxd -r -p > data/40-40.records
+```
 
-`echo 'ff00 0000 00ff ffff 0000 0000 00ff 0000' | xxd -r -p >
-data/8-8-0-0.records  `
+Records are stored in files named like: `data/W-B.records`
 
-Records are stored in files named like: `data/A-B-C-D.records`
+-   `W` — Maximum remaining moves for white
 
--   `A` — Number of white pawns
+-   `B` — Maximum remaining moves for black
 
--   `B` — Number of black pawns
-
--   `C` — Sum forward progress of white pawns from home position
-
--   `D` — Sum forward progress of black pawns from home position
 
 The 128-bit record format is (little endian values):
 
 -   Bits 0…47 — 1 if pawn is on the board (file A…H, rank 7…2)
-
 -   Bits 48…95 — 1 if the pawn is black
+-   Bits 96…126 — required piece captures
 
--   Bits 96…127 — the captures (to document)
+For each record we are interested in the required number of white piece (♕♖♗♘♙) captures and black piece captures (♛♜♝♞♟). If a certain position is reachable by either 3W/2B or 2W/2B captures then only the latter is notable because you can easily find another way to remove a white piece from the board. You can encode an NxM efficient curve with N+M−1 bits. For example, the below is encoded `000010101101101` (the last bit can always be inferred).
 
-Sorting / unique phase
-----------------------
+![encode-captures](/Users/williamentriken/pawn-bfs/encode-captures.png)
 
-`./hsort data/8-8-0-0.records; ./uniq data/8-8-0-0.records`
+## Tally phase
 
-Before a records file is branched, or when disk space needs saving, it is
-sorted/uniqued. This process finds any record that "dominates" another:
+```sh
+./tally data/40-40.records
+```
 
-a) the same pawn diagram
+The tally program reads each record and finds which number of white captures and black captures is compatible with that record (the efficiency curve). It also counts how many ways the remaining armies could be placed on the board. This also outputs the total number of chess diagrams.
 
-b) the same or greater number of white promotions
+## Branching phase
 
-c) the same or greater number of black promotions
+```sh
+./bfs data/40-39.records
+```
 
-d) the same or lesser number of white captures of non-pawns
+This will open the W40/B39 file where white pawns are in the opening position and one black pawn made progress. The BFS search will find records where:
 
-e) the same or lesser number of black captures of non-pawns
+* A white pawn is captured (W35/B39)
+* A white pawn makes progress (W39/B39)
+* A black pawn is captured (W40/B35) or (W40/B34)
+* A black pawn makes progress (W40/B38)
 
-and deletes the dominated position.
+In every case, one of the numbers will decrease. Outputs are saved to `data/W-B-branched-NEWW-NEWB.records`.
 
-### Branching phase
+## Sorting / unique phase
 
-`./bfs data/8-8-0-0.records`
+```sh
+cat data/*-*-branched-39-39.records > data/39-39.records
+rm data/*-*-branched-39-39.records
+./hsort data/39-39.records
+./uniq data/39-39.records
+```
 
-A records file is opened and each record inside is expanded through all possible
-moves. These new positions are all saved based on the file-naming convention
-above after being folded for symmetry.
-
-### Tally phase
-
-`./bfs data/8-8-0-0.records # creates the file data/8-8-0-0.tally`
-
-This reads a record file and counts the number of chess positions for each
-(white to move + black to move + opportunity for en passant) while taking into
-consideration symmetry. The tally sums positions as they are distinct in \<white
-promotions, black promotions, white captures of non pawns, black captures\>.
-
-Programs
-========
-
--   `xxd` - Standard command line tool, use to create opening position file,
-    which has one record
-
--   `print` - Lists all records in a file for debugging
-
--   `tally` - Summarizes the records in a file
-
--   `bfs` - Reads each record in a file, finds all diagrams reachable by one
-    move, saves those records to a new file
-
--   `hsort` - Sorts records in a file using heapsort (qsort was slower on SSDs)
-
--   `merge` - Removes duplicate records in a sorted file
+The sorting program moves all records with the same (folded) pawn diagram to be consecutive. The uniquing program calculates the combined efficiency curve and truncates the file to remove duplicates.
 
 Get started
-===========
+-----------
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 echo 'ff00 0000 00ff ffff 0000 0000 00ff 0000' | xxd -r -p > data/8-8-0-0.records
@@ -119,105 +97,17 @@ you run `cat data/*.records.a-b-c-d > data/a-b-c-d.records` and all the sorting
 and merging.
 
 Project status
-==============
+--------------
 
 -   MERGE FUNCTION IS NOT MERGING THE POSSIBLE ARMIES
-
 -   need to fix this before counting positions look for symmetric records, their
     possible armies should be symmetric, if not something is wrong
-
 -   Tally and or bfs have a problem noting the number of symmetries
-
 -   Passing SIGINT does not corrupt data in short (it’s a slow process)
-
-Notation
-========
-
-**Army** refers to pieces on the board other than the king.
-
-White and black pawns are placed on the board on the home row. Each respective
-move forward increases that pawn's **"progress"**.
-
-**Symmetry and folding** are applied so we only consider boards where:
-
--   Pawns on left lexigraphically more than pawns on right, and
-
--   Either
-
-    -   White pawns \> black pawns, or
-
-    -   Equal pawns and white progress \> black progress, or
-
-    -   Equal pawns, equal progress, and white arranged lexicographically before
-        black
-
-During counting, folded positions are counted multiple times, as appropriate.
-
-Each pawn diagram on the board is represented by a 128-bit record. This record
-is:
-
--   White and black pawn diagram
-
--   16x16 matrix of whether this diagram is reachable with a given size of white
-    and black armies
-
--   TODO: explain binary coding scheme here
-
-**Conceivable diagrams** are ways you could place pawns on a board with given
-restrictions. **Reached diagrams** have tracable retrograde to the opening
-position.
-
-Conceivable diagrams
-====================
-
-The `tally` program will calculate the number of conceivable diagrams before it
-calculates the actual reached diagrams found in the `data/` files. As a sanity
-check, run:
-
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-for w in {0..8}
-do for b in {0..$w}
-    do for wp in {0..$[w*5]}
-        do for bp in {0..$[b*5]}
-            do [ "$w" -eq "$b" ] && [ "$bp" -gt "$wp" ] && continue
-            echo -ne "$w-$b-$wp-$bp\t"
-            echo `./tally data/$w-$b-$wp-$bp.dry | grep 'Conceivable diagrams' | cut -d' ' -f 5`
-        done
-    done
-done
-done > DRY
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-These numbers are divided by 1 billion and saved in `SCOREBOARD.ods`. You can
-confirm by imagining ways to fit 2 white and 1 black marble in 48 slots:
-
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-grep '^2-1-' DRY | cut -f2 | paste -sd+ - | bc
-# Should be 48!/(48-2-1)!/2!/1!*2
-# = 103 776
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-And also:
-
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-grep '^8-8-' DRY | cut -f2 | paste -sd+ - | bc
-# Should be 48!/(48-8-8)!/8!/8!
-# = 29 019 905 518 636 890 
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-To count all conceivable:
-
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-cut -f2 DRY | paste -sd+ - | bc
-# Should be sum(i=0..8) sum(j=0..8) 48!/(48-i-j)!/i!/j! 
-# = 49 095 495 585 283 107
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-This is 2\^55.4, which would require 785 petabytes of storage (before folding)
-if all positions were reachable.
+-   This is 2^55.4, which would require 785 petabytes of storage (before folding) if all positions were reachable.
 
 Random notes
-============
+------------
 
 Get a random pawn diagram:
 
