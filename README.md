@@ -46,7 +46,7 @@ The 128-bit record format is (little endian values):
 
 For each record we are interested in the required number of white piece (♕♖♗♘♙) captures and black piece captures (♛♜♝♞♟). If a certain position is reachable by either 3W/2B or 2W/2B captures then only the latter is notable because you can easily find another way to remove a white piece from the board. You can encode an NxM efficient curve with N+M−1 bits. For example, the below is encoded `000010101101101` (the last bit can always be inferred).
 
-![encode-captures](/Users/williamentriken/pawn-bfs/encode-captures.png)
+![encode-captures](encode-captures.png)
 
 ## Tally phase
 
