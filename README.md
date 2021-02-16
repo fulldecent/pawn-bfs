@@ -135,3 +135,5 @@ Discussion on Chess upper bounds:
 -   <http://www.janko.at/Retros/>
 
 -   <http://www.mathhelpforum.com/math-help/discrete-mathematics-set-theory-logic/115926-combinatorics-chessproblem-probably-will-take-some-time-answering.html>
+
+-   <https://tromp.github.io/chess/chess.html>
